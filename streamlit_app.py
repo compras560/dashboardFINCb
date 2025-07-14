@@ -69,12 +69,13 @@ style_css = """
 /* Sidebar */
 .sidebar-container {
   padding: 10px;
+  margin-bottom: 10px;  /* DIMINUI ESPAÇO ENTRE MENU E CALENDÁRIO */
 }
-.sidebar-title {
-  font-weight: bold;
-  font-size: 18px;
-  margin-bottom: 10px;
-  color: #0072ff;
+
+/* Container da imagem com margem superior negativa para subir a imagem */
+.sidebar-logo-container {
+  margin-top: -20px;  /* Ajuste para subir imagem */
+  margin-bottom: 12px;
 }
 
 /* Estilo do st.radio para tema claro */
@@ -156,86 +157,18 @@ div[role="radiogroup"] > label[data-selected="true"] {
 st.set_page_config(layout="wide", page_title="Resumo Semanal de Boletos")
 st.markdown(style_css, unsafe_allow_html=True)
 
-# Cabeçalho com logo
-col_logo, col_titulo = st.columns([1, 3])
-with col_logo:
-    st.image("logo/LOGO.JPG", width=200)
-with col_titulo:
-    st.markdown("## 📊 Resumo Semanal de Boletos")
-
-# === FERIADOS E FUNÇÕES ===
-
-FERIADOS_FIXOS = {(1,1),(21,4),(1,5),(7,9),(12,10),(2,11),(15,11),(20,11),(25,12),(15,7),(8,9)}
-
-def calcular_pascoa(ano):
-    a = ano % 19
-    b = ano // 100
-    c = ano % 100
-    d = b // 4
-    e = b % 4
-    f = (b + 8) // 25
-    g = (b - f + 1) // 3
-    h = (19 * a + b - d - g + 15) % 30
-    i = c // 4
-    k = c % 4
-    l = (32 + 2 * e + 2 * i - h - k) % 7
-    m = (a + 11 * h + 22 * l) // 451
-    mes = (h + l - 7 * m + 114) // 31
-    dia = ((h + l - 7 * m + 114) % 31) + 1
-    return date(ano, mes, dia)
-
-def feriados_moveis(ano):
-    pascoa = calcular_pascoa(ano)
-    return {
-        pascoa,
-        pascoa - timedelta(days=47),
-        pascoa - timedelta(days=2),
-        pascoa + timedelta(days=60),
-    }
-
-def is_feriado(d):
-    return (d.day, d.month) in FERIADOS_FIXOS or d in feriados_moveis(d.year)
-
-def proximo_dia_util(d):
-    while d.weekday() >= 5 or is_feriado(d):
-        d += timedelta(days=1)
-    return d
-
-@st.cache_data(ttl=300)
-def obter_dados():
-    conn = psycopg2.connect(DB_URL)
-    cursor = conn.cursor()
-    cursor.execute("SELECT descricao, data, valor FROM lancamentos WHERE status='pendente'")
-    dados = cursor.fetchall()
-    conn.close()
-    return dados
-
-@st.cache_data(ttl=300)
-def obter_limites(ano, mes):
-    conn = psycopg2.connect(DB_URL)
-    cursor = conn.cursor()
-    cursor.execute("SELECT semana, limite FROM limites_semanais WHERE ano=%s AND mes=%s", (ano, mes))
-    res = cursor.fetchall()
-    conn.close()
-    return dict(res)
-
-def salvar_limite(ano, mes, semana, limite):
-    conn = psycopg2.connect(DB_URL)
-    cursor = conn.cursor()
-    cursor.execute('''
-        INSERT INTO limites_semanais (ano, mes, semana, limite)
-        VALUES (%s, %s, %s, %s)
-        ON CONFLICT (ano, mes, semana) DO UPDATE SET limite = EXCLUDED.limite
-    ''', (ano, mes, semana, limite))
-    conn.commit()
-    conn.close()
-
 # === LAYOUT ===
 
 col1, col2 = st.columns([1, 4])
 
 with col1:
     st.markdown("<div class='sidebar-container'>", unsafe_allow_html=True)
+    
+    # Coloca a imagem dentro de um container com margem customizada para subir
+    st.markdown("<div class='sidebar-logo-container'>", unsafe_allow_html=True)
+    st.image("logo/LOGO.JPG", use_container_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
     st.markdown("<div class='sidebar-title'>Ano</div>", unsafe_allow_html=True)
     ano = st.selectbox("", list(range(2025, 2035)), index=0)
 
@@ -247,7 +180,75 @@ with col1:
     st.markdown("</div>", unsafe_allow_html=True)
 
 with col2:
+    st.markdown("## 📊 Resumo Semanal de Boletos")  # Título separado da imagem
+
     filtro = st.text_input("🔍 Filtro por descrição")
+
+    # Funções para feriados, dados e limites seguem iguais
+    FERIADOS_FIXOS = {(1,1),(21,4),(1,5),(7,9),(12,10),(2,11),(15,11),(20,11),(25,12),(15,7),(8,9)}
+
+    def calcular_pascoa(ano):
+        a = ano % 19
+        b = ano // 100
+        c = ano % 100
+        d = b // 4
+        e = b % 4
+        f = (b + 8) // 25
+        g = (b - f + 1) // 3
+        h = (19 * a + b - d - g + 15) % 30
+        i = c // 4
+        k = c % 4
+        l = (32 + 2 * e + 2 * i - h - k) % 7
+        m = (a + 11 * h + 22 * l) // 451
+        mes = (h + l - 7 * m + 114) // 31
+        dia = ((h + l - 7 * m + 114) % 31) + 1
+        return date(ano, mes, dia)
+
+    def feriados_moveis(ano):
+        pascoa = calcular_pascoa(ano)
+        return {
+            pascoa,
+            pascoa - timedelta(days=47),
+            pascoa - timedelta(days=2),
+            pascoa + timedelta(days=60),
+        }
+
+    def is_feriado(d):
+        return (d.day, d.month) in FERIADOS_FIXOS or d in feriados_moveis(d.year)
+
+    def proximo_dia_util(d):
+        while d.weekday() >= 5 or is_feriado(d):
+            d += timedelta(days=1)
+        return d
+
+    @st.cache_data(ttl=300)
+    def obter_dados():
+        conn = psycopg2.connect(DB_URL)
+        cursor = conn.cursor()
+        cursor.execute("SELECT descricao, data, valor FROM lancamentos WHERE status='pendente'")
+        dados = cursor.fetchall()
+        conn.close()
+        return dados
+
+    @st.cache_data(ttl=300)
+    def obter_limites(ano, mes):
+        conn = psycopg2.connect(DB_URL)
+        cursor = conn.cursor()
+        cursor.execute("SELECT semana, limite FROM limites_semanais WHERE ano=%s AND mes=%s", (ano, mes))
+        res = cursor.fetchall()
+        conn.close()
+        return dict(res)
+
+    def salvar_limite(ano, mes, semana, limite):
+        conn = psycopg2.connect(DB_URL)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO limites_semanais (ano, mes, semana, limite)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (ano, mes, semana) DO UPDATE SET limite = EXCLUDED.limite
+        ''', (ano, mes, semana, limite))
+        conn.commit()
+        conn.close()
 
     dados = obter_dados()
     resumo = defaultdict(float)
